@@ -94,7 +94,15 @@ include_directories(
 add_executable (downsample src/downsample.cpp)
 target_link_libraries (downsample ${catkin_LIBRARIES})
 add_executable(map_registration src/map_registration.cpp)
-target_link_libraries(map_registration ${catkin_LIBRARIES})
+target_link_libraries(map_registration 
+  ${catkin_LIBRARIES} 
+  ${PCL_LIBRARIES}
+)
+add_executable(icp_tut src/icp_tut.cpp)
+target_link_libraries(icp_tut 
+  ${catkin_LIBRARIES} 
+  ${PCL_LIBRARIES}
+)
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/pcl_downsample.cpp
