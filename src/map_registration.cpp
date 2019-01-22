@@ -7,11 +7,18 @@
 #include "pcl_conversions/pcl_conversions.h"
 
 ros::Publisher pub;
-pcl::PCLPointCloud2* prev_cloud_filtered = new pcl:PCLPointCloud2;
+pcl::PCLPointCloud2* prev_cloud_filtered_global = new pcl::PCLPointCloud2;
 
-void perform_icp(const pcl::PCLPointCloud2ConstPtr& cloud_filtered)
+void perform_icp(pcl::PCLPointCloud2ConstPtr& prev_cloud_filtered, pcl::PCLPointCloud2ConstPtr& cloud_filtered)
 {
-
+  pcl::IterativeClosestPoint<pcl::PointXYZ, pcl::PointXYZ> icp;
+  icp.setInputSource(prev_cloud_filtered);
+  icp.setInputTarget(cloud_filtered);
+  pcl::PointCloud<pcl::PointXYZ> Final;
+  icp.align(Final);
+  std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+  icp.getFitnessScore() << std::endl;
+  std::cout << icp.getFinalTransformation() << std::endl;
 }
 
 void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)

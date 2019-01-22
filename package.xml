@@ -1,8 +1,8 @@
 <?xml version="1.0"?>
   <package format="2">
-  <name>pcl_downsample</name>
+  <name>lidar_mapping</name>
   <version>0.0.0</version>
-  <description>The pcl_downsample package</description>
+  <description>The lidar_mapping package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
   <!-- Example:  -->
