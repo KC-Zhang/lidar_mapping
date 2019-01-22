@@ -9,21 +9,20 @@
 
 ros::Publisher pub;
 pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud(new pcl::PointCloud<pcl::PointXYZI>);
-pcl::PCLPointCloud2* prev_cloud_filtered_global = new pcl::PCLPointCloud2;
 
-// void perform_icp(pcl::PCLPointCloud2ConstPtr& prev_cloud_filtered, pcl::PCLPointCloud2ConstPtr& cloud_filtered)
-// {
-//   pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
-//   icp.setInputSource(prev_cloud_filtered);
-//   icp.setInputTarget(cloud_filtered);
-//   pcl::PointCloud<pcl::PointXYZI> Final;
-//   icp.align(Final);
-//   std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-//   icp.getFitnessScore() << std::endl;
-//   std::cout << icp.getFinalTransformation() << std::endl;
-// }
+void icpCallback(pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud, pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
+{
+  pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
+  icp.setInputSource(prev_cloud_filtered);
+  icp.setInputTarget(cloud_filtered);
+  pcl::PointCloud<pcl::PointXYZI> Final;
+  icp.align(Final);
+  std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+  icp.getFitnessScore() << std::endl;
+  std::cout << icp.getFinalTransformation() << std::endl;
+}
 
-void pointcloudCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
+void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
 {
 	pcl::PCLPointCloud2* cloud = new pcl::PCLPointCloud2;
 	pcl::PCLPointCloud2ConstPtr cloudPtr(cloud);
@@ -54,7 +53,7 @@ int main (int argc, char** argv){
 	ros::init (argc, argv, "my_pcl_tutorial");
 	ros::NodeHandle nh;
 	ros::Rate loop_rate(10);
-	ros::Subscriber sub=nh.subscribe("velodyne_points", 1, pointcloudCallback);
+	ros::Subscriber sub=nh.subscribe("velodyne_points", 1, downSampleCallback);
 	pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
 	//ros::spinOnce();
 	//loop_rate.sleep();
