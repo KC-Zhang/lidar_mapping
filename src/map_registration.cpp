@@ -8,18 +8,20 @@
 #include "pcl/registration/icp.h"
 
 ros::Publisher pub;
-pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud(new pcl::PointCloud<pcl::PointXYZI>);
 
-void icpCallback(pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud, pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
+void icpCallback(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
 {
-  pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
-  icp.setInputSource(prev_cloud_filtered);
-  icp.setInputTarget(cloud_filtered);
-  pcl::PointCloud<pcl::PointXYZI> Final;
-  icp.align(Final);
-  std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-  icp.getFitnessScore() << std::endl;
-  std::cout << icp.getFinalTransformation() << std::endl;
+	if (cloud)
+	pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+
+	pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
+	icp.setInputSource(prev_cloud_filtered);
+	icp.setInputTarget(cloud_filtered);
+	pcl::PointCloud<pcl::PointXYZI> Final;
+	icp.align(Final);
+	std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+	icp.getFitnessScore() << std::endl;
+	std::cout << icp.getFinalTransformation() << std::endl;
 }
 
 void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
