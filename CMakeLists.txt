@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 2.8.3)
 project(lidar_mapping)
 
+list(APPEND CMAKE_PREFIX_PATH "/opt/ros/kinetic")
+
 ## Compile as C++11, supported in ROS Kinetic and newer
 # add_compile_options(-std=c++11)
 
@@ -8,8 +10,8 @@ project(lidar_mapping)
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS 
-  pcl_ros
   roscpp
+  pcl_ros
   sensor_msgs
   pcl_conversions
  )
@@ -74,8 +76,8 @@ catkin_package(
 #  INCLUDE_DIRS include
 #  LIBRARIES pcl_downsample
   CATKIN_DEPENDS 
-    pcl_ros
     roscpp
+    pcl_ros
     sensor_msgs
     pcl_conversions
 #  DEPENDS system_lib

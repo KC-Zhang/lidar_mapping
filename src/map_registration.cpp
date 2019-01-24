@@ -8,20 +8,39 @@
 #include "pcl/registration/icp.h"
 
 ros::Publisher pub;
+bool first_msg = true;
+sensor_msgs::PointCloud2 prev_cloud;
 
-void icpCallback(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud)
+void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
-	if (cloud)
-	pcl::PointCloud<pcl::PointXYZI>::Ptr prev_cloud(new pcl::PointCloud<pcl::PointXYZI>);
+    //initial pointcloud
+    if (first_msg == true) {
+        prev_cloud = *msg;
+        first_msg = false;
+        return;
+    }
 
-	pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
-	icp.setInputSource(prev_cloud_filtered);
-	icp.setInputTarget(cloud_filtered);
-	pcl::PointCloud<pcl::PointXYZI> Final;
-	icp.align(Final);
-	std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-	icp.getFitnessScore() << std::endl;
-	std::cout << icp.getFinalTransformation() << std::endl;
+    if ((msg->header.stamp - prev_cloud.header.stamp).toSec() < 0.5) {
+        std::cout<<"time from the last message: "<<(msg->header.stamp - prev_cloud.header.stamp).toSec()<<std::endl;
+        return;
+    }
+
+    pcl::PointCloud<pcl::PointXYZI>::Ptr prev_PointTCloud(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::fromROSMsg(prev_cloud, *prev_PointTCloud); //void 	fromROSMsg (const sensor_msgs::PointCloud2 &cloud, pcl::PointCloud< T > &pcl_cloud)
+
+    pcl::PointCloud<pcl::PointXYZI>::Ptr PointTCloud(new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::fromROSMsg(*msg, *PointTCloud);
+
+    pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
+    icp.setInputSource(prev_PointTCloud);
+    icp.setInputTarget(PointTCloud);
+    pcl::PointCloud<pcl::PointXYZI> Final;
+    icp.align(Final);
+    std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+    icp.getFitnessScore() << std::endl;
+    std::cout << icp.getFinalTransformation() << std::endl;
+
+    prev_cloud=*msg;
 }
 
 void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg)
@@ -57,6 +76,7 @@ int main (int argc, char** argv){
 	ros::Rate loop_rate(10);
 	ros::Subscriber sub=nh.subscribe("velodyne_points", 1, downSampleCallback);
 	pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
+    ros::Subscriber icpsub=nh.subscribe("velodyne_points_downsampled", 1, icpCallback);
 	//ros::spinOnce();
 	//loop_rate.sleep();
 	ros::spin();
