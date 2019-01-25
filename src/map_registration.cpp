@@ -30,6 +30,7 @@ void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     pcl::PointCloud<pcl::PointXYZI>::Ptr PointTCloud(new pcl::PointCloud<pcl::PointXYZI>);
     pcl::fromROSMsg(*msg, *PointTCloud);
 
+    //icp
     pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
     icp.setInputSource(prev_PointTCloud);
     icp.setInputTarget(PointTCloud);
@@ -37,7 +38,11 @@ void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     icp.align(Final);
     std::cout << "has converged:" << icp.hasConverged() << " score: " <<
     icp.getFitnessScore() << std::endl;
-    std::cout << icp.getFinalTransformation() << std::endl;
+        //get and save the transform
+    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
+    Ti = icp.getFinalTransformation() * Ti;
+    std::cout << "getFinalTransformation \n"<< icp.getFinalTransformation() << std::endl;
+    std::cout << "Ti \n"<< Ti << std::endl;
 
     prev_cloud=*msg;
 }
