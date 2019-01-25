@@ -105,6 +105,9 @@ target_link_libraries(icp_tut
   ${catkin_LIBRARIES} 
   ${PCL_LIBRARIES}
 )
+
+add_executable (pairwise_incremental_registration src/pairwise_incremental_registration.cpp)
+target_link_libraries (pairwise_incremental_registration ${PCL_LIBRARIES} ${catkin_LIBRARIES})
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/pcl_downsample.cpp

@@ -21,7 +21,6 @@ void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     }
 
     if ((msg->header.stamp - prev_cloud.header.stamp).toSec() < 0.5) {
-        std::cout<<"time from the last message: "<<(msg->header.stamp - prev_cloud.header.stamp).toSec()<<std::endl;
         return;
     }
 
