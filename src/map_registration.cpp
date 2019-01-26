@@ -43,6 +43,8 @@ void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     Ti = icp.getFinalTransformation() * Ti;
     std::cout << "getFinalTransformation \n"<< icp.getFinalTransformation() << std::endl;
     std::cout << "Ti \n"<< Ti << std::endl;
+    targetToSource = Ti.inverse();
+    std::cout << "Ti_inverse \n"<< targetToSource << std::endl;
 
     prev_cloud=*msg;
 }
