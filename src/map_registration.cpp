@@ -8,6 +8,7 @@
 #include "pcl/registration/icp.h"
 
 ros::Publisher pub;
+ros::Publisher registration_pub;
 bool first_msg = true;
 sensor_msgs::PointCloud2 prev_cloud;
 
@@ -42,10 +43,14 @@ void icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
     Ti = icp.getFinalTransformation() * Ti;
     std::cout << "getFinalTransformation \n"<< icp.getFinalTransformation() << std::endl;
-    std::cout << "Ti \n"<< Ti << std::endl;
+    //get transformation from target to source
     targetToSource = Ti.inverse();
-    std::cout << "Ti_inverse \n"<< targetToSource << std::endl;
-
+    pcl::PointCloud<pcl::PointXYZI>::Ptr temp (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::transformPointCloud (*PointTCloud, *temp, targetToSource);
+    *temp += *prev_PointTCloud;
+    sensor_msgs::PointCloud2 aggregated_cloud;
+    pcl::toROSMsg(*temp, aggregated_cloud);
+    registration_pub.publish (aggregated_cloud);
     prev_cloud=*msg;
 }
 
@@ -82,6 +87,7 @@ int main (int argc, char** argv){
 	ros::Rate loop_rate(10);
 	ros::Subscriber sub=nh.subscribe("velodyne_points", 1, downSampleCallback);
 	pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
+    registration_pub=nh.advertise<sensor_msgs::PointCloud2> ("pairwise_registration_pointclouds", 1);
     ros::Subscriber icpsub=nh.subscribe("velodyne_points_downsampled", 1, icpCallback);
 	//ros::spinOnce();
 	//loop_rate.sleep();
