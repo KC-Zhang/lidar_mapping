@@ -17,7 +17,7 @@ class PointProcessor
         ros::Publisher pub;
         ros::Publisher pairwise_pub;
         ros::Publisher registration_pub;
-        Eigen::Matrix4f globalSourceToTarget;
+        Eigen::Matrix4f globalTargetToSource;
         pcl::PointCloud<pcl::PointXYZI>::Ptr globalPointTCloud;
         bool first_msg;
         void icpCallback(const sensor_msgs::PointCloud2Ptr& msg);
@@ -25,6 +25,7 @@ class PointProcessor
 
         PointProcessor(){
             globalPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
+            globalTargetToSource = Eigen::Matrix4f::Identity ();
         }
 
         ~PointProcessor(){
@@ -68,7 +69,7 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
         return;
     }
 
-    if ((msg->header.stamp - lastCloudMsg.header.stamp).toSec() < 0.5) {
+    if ((msg->header.stamp - lastCloudMsg.header.stamp).toSec() < 0.2) {
         return;
     }
 
@@ -87,7 +88,7 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     std::cout << "has converged:" << icp.hasConverged() << " score: " <<
     icp.getFitnessScore() << std::endl;
         //get and save the transform
-    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource, globalTargetToSource;  //define 2 variables, Ti, targetToSource
+    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
     Ti = icp.getFinalTransformation() * Ti;
     std::cout << "getFinalTransformation \n"<< icp.getFinalTransformation() << std::endl;
 
@@ -100,12 +101,10 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
     pairwise_pub.publish(pairwiseCloudMsg);
 
     //global registration
-    globalSourceToTarget = globalSourceToTarget*Ti;
-    globalTargetToSource = globalSourceToTarget.inverse();
-    pcl::PointCloud<pcl::PointXYZI>::Ptr tempGlobal (new pcl::PointCloud<pcl::PointXYZI>);
-    pcl::transformPointCloud (*PointTCloud, *tempGlobal, globalTargetToSource);
-    *tempGlobal += *globalPointTCloud;
-    pcl::toROSMsg(*tempGlobal, globalCloudMsg);
+    globalTargetToSource = globalTargetToSource*targetToSource;
+    pcl::transformPointCloud (*PointTCloud, *temp, globalTargetToSource);
+    *globalPointTCloud += *temp;
+    pcl::toROSMsg(*globalPointTCloud, globalCloudMsg);
     registration_pub.publish(globalCloudMsg);
     lastCloudMsg = *msg;
 }
