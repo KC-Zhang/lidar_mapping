@@ -22,6 +22,7 @@ class PointProcessor
         bool first_msg;
         void icpCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg);
+        pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
         PointProcessor(){
             globalPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
@@ -59,6 +60,18 @@ void PointProcessor::downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& 
     pub.publish (output_cloud);
 
 }
+
+pcl::PointCloud<pcl::PointXYZI>::Ptr PointProcessor::downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn){
+    // Create the filtering object
+    pcl::VoxelGrid<pcl::PointXYZI> sor;
+    sor.setInputCloud (cloudIn);
+    sor.setLeafSize (0.05f, 0.05f, 0.05f);
+    pcl::PointCloud<pcl::PointXYZI>::Ptr filteredCloud (new pcl::PointCloud<pcl::PointXYZI>);
+    sor.filter (*filteredCloud);
+    return filteredCloud;
+}
+
+
 void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
     //initial pointcloud
