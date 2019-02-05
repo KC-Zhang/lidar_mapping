@@ -22,6 +22,7 @@ class PointProcessor
         bool first_msg;
         void icpCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg);
+        void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr inTCloud, Eigen::Matrix4f TargetToSource, bool publishROSMessage);
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
         PointProcessor(){
@@ -71,7 +72,16 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr PointProcessor::downSampleCloud(pcl::PointC
     return filteredCloud;
 }
 
+void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr existingTCloud, Eigen::Matrix4f targetToSource, bool publishROSMessage)
+{
+    pcl::PointCloud<pcl::PointXYZI>::Ptr registeredCloud (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::transformPointCloud (*newTCloud, *outTCloud, targetToSource);
+    *outTCloud += *prevPointTCloud;
+    pcl::toROSMsg(*temp, pairwiseCloudMsg);
+    pairwise_pub.publish(pairwiseCloudMsg);
 
+
+}
 void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
     //initial pointcloud
@@ -107,11 +117,8 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 
     //pairwise registration
     targetToSource = Ti.inverse();    //get transformation from target to source
-    pcl::PointCloud<pcl::PointXYZI>::Ptr temp (new pcl::PointCloud<pcl::PointXYZI>);
-    pcl::transformPointCloud (*PointTCloud, *temp, targetToSource);
-    *temp += *prevPointTCloud;
-    pcl::toROSMsg(*temp, pairwiseCloudMsg);
-    pairwise_pub.publish(pairwiseCloudMsg);
+    registerPair(PointTCloud, registeredCloud, targetToSource, true);
+
 
     //global registration
     globalTargetToSource = globalTargetToSource*targetToSource;
