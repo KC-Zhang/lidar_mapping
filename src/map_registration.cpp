@@ -123,10 +123,10 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 
     //downsample global pointcloud
     // Create the filtering object
-//    pcl::VoxelGrid<pcl::PointCloud<pcl::PointXYZI>::Ptr > sor;
-//    sor.setInputCloud (globalPointTCloud);
-//    sor.setLeafSize (0.1f, 0.1f, 0.1f);
-//    sor.filter (globalPointTCloud);
+    pcl::VoxelGrid<pcl::PointXYZI> sor;
+    sor.setInputCloud (globalPointTCloud);
+    sor.setLeafSize (0.1f, 0.1f, 0.1f);
+    sor.filter (*globalPointTCloud);
 
 //    //global registration
 //    globalTargetToSource = globalTargetToSource*targetToSource;
