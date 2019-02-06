@@ -22,7 +22,7 @@ class PointProcessor
         bool first_msg;
         void icpCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg);
-        void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr prevTCloud, Eigen::Matrix4f targetToSource);
+        void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource);
         void performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f outTransformation);
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
@@ -73,11 +73,11 @@ pcl::PointCloud<pcl::PointXYZI>::Ptr PointProcessor::downSampleCloud(pcl::PointC
     return filteredCloud;
 }
 
-void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr prevTCloud, Eigen::Matrix4f targetToSource)
+void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource)
 {
     pcl::PointCloud<pcl::PointXYZI>::Ptr tempIcpOutput (new pcl::PointCloud<pcl::PointXYZI>);
     pcl::transformPointCloud (*newTCloud, *tempIcpOutput, targetToSource);
-    *prevTCloud += *tempIcpOutput;
+    *tempIcpOutput += *globalCloud;
 }
 
 void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f outTransformation)
