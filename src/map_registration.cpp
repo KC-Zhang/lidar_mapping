@@ -115,19 +115,26 @@ void PointProcessor::icpCallback(const sensor_msgs::PointCloud2Ptr& msg)
 
     //icp
     Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
-    performIcp(prevPointTCloud, PointTCloud, Ti);
+    performIcp(globalPointTCloud, PointTCloud, Ti);
 
     //pairwise registration
     targetToSource = Ti.inverse();    //get transformation from target to source
-    registerPair(PointTCloud, prevPointTCloud, targetToSource);
+    registerPair(PointTCloud, globalPointTCloud, targetToSource);
 
-    //global registration
-    globalTargetToSource = globalTargetToSource*targetToSource;
-    registerPair(PointTCloud, globalPointTCloud, globalTargetToSource);
+    //downsample global pointcloud
+    // Create the filtering object
+//    pcl::VoxelGrid<pcl::PointCloud<pcl::PointXYZI>::Ptr > sor;
+//    sor.setInputCloud (globalPointTCloud);
+//    sor.setLeafSize (0.1f, 0.1f, 0.1f);
+//    sor.filter (globalPointTCloud);
+
+//    //global registration
+//    globalTargetToSource = globalTargetToSource*targetToSource;
+//    registerPair(PointTCloud, globalPointTCloud, globalTargetToSource);
 
     //publish ROStopics
-    pcl::toROSMsg(*prevPointTCloud, pairwiseCloudMsg);
-    pairwise_pub.publish(pairwiseCloudMsg);
+//    pcl::toROSMsg(*prevPointTCloud, pairwiseCloudMsg);
+//    pairwise_pub.publish(pairwiseCloudMsg);
     pcl::toROSMsg(*globalPointTCloud, globalCloudMsg);
     registration_pub.publish(globalCloudMsg);
 
