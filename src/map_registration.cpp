@@ -6,6 +6,7 @@
 #include "sensor_msgs/PointCloud2.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl/registration/icp.h"
+#include <pcl/features/normal_3d.h>
 
 class PointProcessor
 {
@@ -15,7 +16,6 @@ class PointProcessor
         sensor_msgs::PointCloud2 pairwiseCloudMsg;
         ros::Publisher pub;
         ros::Publisher pairwise_pub;
-        Eigen::Matrix4f globalTargetToSource;
         pcl::PointCloud<pcl::PointXYZI>::Ptr newPointTCloud, globalPointTCloud;
         bool first_msg;
         bool newPointCloudReceived;
@@ -23,13 +23,15 @@ class PointProcessor
 //        void downSampleCallback(const sensor_msgs::PointCloud2ConstPtr& cloud_msg);
         void registerNewFrame();
         void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource);
-        void performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation);
         void downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr& inAndOutCloud);
+        void addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_with_normals);
+        void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
+                                               pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
+                                               Eigen::Matrix4f &outTransformatio);
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
         PointProcessor(){
             globalPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
-            globalTargetToSource = Eigen::Matrix4f::Identity ();
             newPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
             newPointCloudReceived = false;
         }
@@ -38,8 +40,8 @@ class PointProcessor
 
         }
 };
-////callbacks
 
+////callbacks
 void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
     //initial pointcloud
@@ -51,7 +53,7 @@ void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
         return;
     }
 
-    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.5) {
+    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.05) {
         return;
     }
 
@@ -69,10 +71,9 @@ void PointProcessor::registerNewFrame()
     //downsample incoming pointcloud and return to the same variable
     PointProcessor::downsampleTCloud(newPointTCloud);
 
-    //icp
-    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
-    performIcp(globalPointTCloud, newPointTCloud, Ti);
     //performIcpWithNormal
+    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
+    performIcpWNormals(globalPointTCloud, newPointTCloud, Ti);
 
     //pairwise registration
     targetToSource = Ti.inverse();    //get transformation from target to source
@@ -81,26 +82,6 @@ void PointProcessor::registerNewFrame()
     //downsample global pointcloud
     PointProcessor::downsampleTCloud(globalPointTCloud);
 
-}
-void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource)
-{
-    pcl::PointCloud<pcl::PointXYZI>::Ptr tempOutput (new pcl::PointCloud<pcl::PointXYZI>);
-    pcl::transformPointCloud (*newTCloud, *tempOutput, targetToSource);
-    *globalCloud += *tempOutput;
-}
-
-void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
-{
-    pcl::IterativeClosestPoint<pcl::PointXYZI, pcl::PointXYZI> icp;
-    icp.setInputSource(sourceTCloud);
-    icp.setInputTarget(targetTCloud);
-    pcl::PointCloud<pcl::PointXYZI> outputTransformedSource;
-    icp.align(outputTransformedSource);
-    std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-    icp.getFitnessScore() << std::endl;
-        //get and save the transform
-    outTransformation = icp.getFinalTransformation() * outTransformation;
-    std::cout << "getFinalTransformation \n"<< icp.getFinalTransformation() << std::endl;
 }
 
 void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAndOutCloud)
@@ -111,6 +92,68 @@ void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAn
     sor.setLeafSize (0.1f, 0.1f, 0.1f);
     sor.filter (*tempFiltered);
     *inAndOutCloud=*tempFiltered;
+}
+
+void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud,
+                                  pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud,
+                                  Eigen::Matrix4f targetToSource)
+{
+    pcl::PointCloud<pcl::PointXYZI>::Ptr tempOutput (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::transformPointCloud (*newTCloud, *tempOutput, targetToSource);
+    *globalCloud += *tempOutput;
+}
+
+void PointProcessor::addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud,
+                               pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_with_normals)
+{
+    pcl::PointCloud<pcl::Normal>::Ptr normals (new pcl::PointCloud<pcl::Normal>);
+
+    pcl::search::KdTree<pcl::PointXYZI>::Ptr searchTree (new pcl::search::KdTree<pcl::PointXYZI>);
+    searchTree->setInputCloud (cloud);
+
+    pcl::NormalEstimation<pcl::PointXYZI, pcl::Normal> normalEstimator;
+    normalEstimator.setInputCloud (cloud);
+    normalEstimator.setSearchMethod (searchTree);
+    normalEstimator.setKSearch (15);
+    normalEstimator.compute (*normals);
+
+    pcl::concatenateFields( *cloud, *normals, *cloud_with_normals);
+
+}
+
+void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
+                                       pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
+                                       Eigen::Matrix4f &outTransformation)
+{
+    // add normal to the clouds
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr sourceTCloudNormals ( new pcl::PointCloud<pcl::PointXYZINormal> () );
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr targetTCloudNormals ( new pcl::PointCloud<pcl::PointXYZINormal>());
+    addNormal( sourceTCloud, sourceTCloudNormals);
+    addNormal( targetTCloud, targetTCloudNormals);
+
+    //setup icp with normal
+    pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal>::Ptr
+            icp (new pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal>());
+    icp->setMaximumIterations (1);
+    icp->setInputSource(sourceTCloudNormals);
+    icp->setInputTarget(targetTCloudNormals);
+
+    //perform icp and align pointcloud
+    pcl::PointCloud<pcl::PointXYZINormal> outputSourceTrans;
+    icp->align(outputSourceTrans);
+
+    //???????????need to be implement : wait for converge
+    if (icp->hasConverged()){
+        std::cout << "has converged:" << icp->hasConverged() << " score: " <<
+        icp->getFitnessScore() << std::endl;
+    }
+    else {
+        std::cout <<"not converged. "<< " score: " <<
+                    icp->getFitnessScore() << std::endl;
+    }
+        //get and save the transform
+    outTransformation = icp->getFinalTransformation();
+    std::cout << "getFinalTransformation \n"<< outTransformation << std::endl;
 }
 
 int main (int argc, char** argv){
@@ -133,12 +176,19 @@ int main (int argc, char** argv){
 
 
     while(ros::ok()){
+        //check for new sensor message
         ros::spinOnce();
         if (pointProcessor.newPointCloudReceived == false){
             continue;}
+
+        //alignment and registration
         pointProcessor.registerNewFrame();
+
+        //convert to msg
         pcl::toROSMsg(*pointProcessor.globalPointTCloud, globalCloudMsg);
         registration_pub.publish(globalCloudMsg);
+
+        //finishing the loop
         pointProcessor.newPointCloudReceived = false;
         loop_rate.sleep();
         //ros::spin();
