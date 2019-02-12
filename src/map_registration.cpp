@@ -7,6 +7,7 @@
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl/registration/icp.h"
 #include <pcl/features/normal_3d.h>
+#include <tf/transform_broadcaster.h>
 
 class PointProcessor
 {
@@ -16,6 +17,7 @@ class PointProcessor
         sensor_msgs::PointCloud2 pairwiseCloudMsg;
         ros::Publisher pub;
         ros::Publisher pairwise_pub;
+        tf::TransformBroadcaster tf_broadcast;
         pcl::PointCloud<pcl::PointXYZI>::Ptr newPointTCloud, globalPointTCloud;
         bool first_msg;
         bool newPointCloudReceived;
@@ -28,6 +30,8 @@ class PointProcessor
         void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                                pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
                                                Eigen::Matrix4f &outTransformatio);
+        void plottf(Eigen::Matrix4f h, std::string parentName, std::string childName);
+
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
         PointProcessor(){
@@ -53,7 +57,7 @@ void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
         return;
     }
 
-    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.05) {
+    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.2) {
         return;
     }
 
@@ -64,24 +68,6 @@ void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
     newPointCloudReceived = true;
 
 //    prevCloudMsg = *msg;
-}
-
-void PointProcessor::registerNewFrame()
-{
-    //downsample incoming pointcloud and return to the same variable
-    PointProcessor::downsampleTCloud(newPointTCloud);
-
-    //performIcpWithNormal
-    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
-    performIcpWNormals(globalPointTCloud, newPointTCloud, Ti);
-
-    //pairwise registration
-    targetToSource = Ti.inverse();    //get transformation from target to source
-    registerPair(newPointTCloud, globalPointTCloud, targetToSource);
-
-    //downsample global pointcloud
-    PointProcessor::downsampleTCloud(globalPointTCloud);
-
 }
 
 void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAndOutCloud)
@@ -121,6 +107,18 @@ void PointProcessor::addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud,
 
 }
 
+void PointProcessor::plottf(Eigen::Matrix4f h, std::string parentName, std::string childName){
+
+  tf::Transform frame;
+  frame.setOrigin(tf::Vector3(h(0,3), h(1,3), h(2,3)));
+  frame.setBasis(tf::Matrix3x3(h(0,0), h(0,1), h(0,2),
+                               h(1,0), h(1,1), h(1,2),
+                               h(2,0), h(2,1), h(2,2)));
+  ros::Time newTCloudTime;
+  pcl_conversions::fromPCL(newPointTCloud->header.stamp, newTCloudTime);
+  tf_broadcast.sendTransform(tf::StampedTransform(frame, newTCloudTime, parentName, childName));
+}
+
 void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                        pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
                                        Eigen::Matrix4f &outTransformation)
@@ -153,7 +151,25 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
     }
         //get and save the transform
     outTransformation = icp->getFinalTransformation();
-    std::cout << "getFinalTransformation \n"<< outTransformation << std::endl;
+}
+
+void PointProcessor::registerNewFrame()
+{
+    //downsample incoming pointcloud and return to the same variable
+    PointProcessor::downsampleTCloud(newPointTCloud);
+
+    //performIcpWithNormal
+    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
+    performIcpWNormals(globalPointTCloud, newPointTCloud, Ti); //void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
+
+    //pairwise registration
+    targetToSource = Ti.inverse();    //get transformation from target to source
+    registerPair(newPointTCloud, globalPointTCloud, targetToSource);
+    plottf(targetToSource, "velodyne", "map");
+
+    //downsample global pointcloud
+    PointProcessor::downsampleTCloud(globalPointTCloud);
+
 }
 
 int main (int argc, char** argv){
@@ -171,7 +187,6 @@ int main (int argc, char** argv){
     pointProcessor.pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
     registration_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_aggregated", 1);
     pointProcessor.pairwise_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_pairwise", 1);
-//    ros::Subscriber sub=nh.subscribe("velodyne_points", 1, &PointProcessor::downSampleCallback, &pointProcessor);
     ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);
 
 
