@@ -101,10 +101,10 @@ void PointProcessor::plottf(Eigen::Matrix4f h, std::string parentName, std::stri
 
 void PointProcessor::registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud,
                                   pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud,
-                                  Eigen::Matrix4f targetToSource)
+                                  Eigen::Matrix4f tToS)
 {
     pcl::PointCloud<pcl::PointXYZI>::Ptr tempOutput (new pcl::PointCloud<pcl::PointXYZI>);
-    pcl::transformPointCloud (*newTCloud, *tempOutput, targetToSource);
+    pcl::transformPointCloud (*newTCloud, *tempOutput, tToS);
     *globalCloud += *tempOutput;
 }
 
@@ -127,7 +127,7 @@ void PointProcessor::addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud,
 
 void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                        pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
-                                       Eigen::Matrix4f &sourceToTarget)
+                                       Eigen::Matrix4f &sToT)
 {
     // add normal to the clouds
     pcl::PointCloud<pcl::PointXYZINormal>::Ptr sourceTCloudNormals ( new pcl::PointCloud<pcl::PointXYZINormal> () );
@@ -138,7 +138,7 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
     //setup icp with normal
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp;
     icp.setTransformationEpsilon (1e-6);
-    icp.setMaxCorrespondenceDistance (0.3);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
+    icp.setMaxCorrespondenceDistance (0.2);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
     icp.setMaximumIterations (100);
     icp.setInputSource(sourceTCloudNormals);
     icp.setInputTarget(targetTCloudNormals);
@@ -148,7 +148,7 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
 
     Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity (), prev, targetToSource;
 
-    for (int i = 0; i <30; ++i){
+    for (int i = 0; i <1; ++i){
         PCL_INFO("iteration Nr. %d. \n", i);
 
         sourceTCloudNormals=icp_result;
@@ -171,7 +171,7 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
         icp.getFitnessScore() << std::endl;
     }
 
-    sourceToTarget = Ti;
+    sToT = Ti;
         //get and save the transform
 }
 
@@ -194,14 +194,14 @@ void PointProcessor::registerNewFrame()
     //performIcpWithNormal
     Eigen::Matrix4f sourceToTarget = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
     //performIcpWNormals(globalPointTCloud, newPointTCloud, Ti); //void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
-    performIcpWNormals(prevPointTCloud, newPointTCloud, sourceToTarget);
+    performIcpWNormals(globalPointTCloud, newPointTCloud, sourceToTarget);
 
     //pairwise registration
     targetToSource = sourceToTarget.inverse();    //get transformation from target to source
-    globalTargetToSource = targetToSource*globalTargetToSource;
-    std::cout<< globalTargetToSource<< std::endl;
-    registerPair(newPointTCloud, globalPointTCloud, globalTargetToSource);
-    plottf(globalTargetToSource, "velodyne", "map");
+//    globalTargetToSource = targetToSource*globalTargetToSource;
+    std::cout<< targetToSource<< std::endl;
+    registerPair(newPointTCloud, globalPointTCloud, targetToSource);
+    plottf(targetToSource, "velodyne", "map");
 
     //downsample global pointcloud
     PointProcessor::downsampleTCloud(globalPointTCloud);
