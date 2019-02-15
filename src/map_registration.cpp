@@ -139,7 +139,7 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp;
     icp.setTransformationEpsilon (1e-6);
     icp.setMaxCorrespondenceDistance (0.3);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
-    icp.setMaximumIterations (1);
+    icp.setMaximumIterations (100);
     icp.setInputSource(sourceTCloudNormals);
     icp.setInputTarget(targetTCloudNormals);
 
@@ -189,7 +189,7 @@ void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTClou
 void PointProcessor::registerNewFrame()
 {
     //downsample incoming pointcloud and return to the same variable
-    PointProcessor::downsampleTCloud(newPointTCloud);
+//    PointProcessor::downsampleTCloud(newPointTCloud);
 
     //performIcpWithNormal
     Eigen::Matrix4f sourceToTarget = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
