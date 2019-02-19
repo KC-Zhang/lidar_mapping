@@ -21,7 +21,7 @@ class PointProcessor
         pcl::PointCloud<pcl::PointXYZI>::Ptr newPointTCloud, prevPointTCloud, globalPointTCloud;
         bool first_msg;
         bool newPointCloudReceived;
-        Eigen::Matrix4f globalTargetToSource;
+        Eigen::Matrix4f priorNewToGlobal;
         void lidarCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void registerNewFrame();
         void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource);
@@ -29,6 +29,7 @@ class PointProcessor
         void addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud, pcl::PointCloud<pcl::PointXYZINormal>::Ptr cloud_with_normals);
         void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                                pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
+                                               Eigen::Matrix4f &priorSToT,
                                                Eigen::Matrix4f &outTransformatio);
         void performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                         pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
@@ -42,7 +43,7 @@ class PointProcessor
             newPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
             prevPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
             newPointCloudReceived = false;
-            globalTargetToSource = Eigen::Matrix4f::Identity ();
+            priorNewToGlobal = Eigen::Matrix4f::Identity ();
         }
 
         ~PointProcessor(){
@@ -127,33 +128,38 @@ void PointProcessor::addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud,
 
 void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
                                        pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
+                                       Eigen::Matrix4f &priorSToT,
                                        Eigen::Matrix4f &sToT)
 {
+    //transform the source cloud by applying prior transform, the source pointcloud should be the smaller one compared to the target for computational speed.
+    pcl::PointCloud<pcl::PointXYZI>::Ptr SourceTrans (new pcl::PointCloud<pcl::PointXYZI>);
+    pcl::transformPointCloud(*sourceTCloud, *SourceTrans, priorSToT);
+
     // add normal to the clouds
-    pcl::PointCloud<pcl::PointXYZINormal>::Ptr sourceTCloudNormals ( new pcl::PointCloud<pcl::PointXYZINormal> () );
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr sourceTransNormals ( new pcl::PointCloud<pcl::PointXYZINormal> () );
     pcl::PointCloud<pcl::PointXYZINormal>::Ptr targetTCloudNormals ( new pcl::PointCloud<pcl::PointXYZINormal>());
-    addNormal( sourceTCloud, sourceTCloudNormals);
+    addNormal( SourceTrans, sourceTransNormals);
     addNormal( targetTCloud, targetTCloudNormals);
 
-    //setup icp with normal
+    // setup icp with normal
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp;
     icp.setTransformationEpsilon (1e-6);
     icp.setMaxCorrespondenceDistance (0.2);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
     icp.setMaximumIterations (100);
-    icp.setInputSource(sourceTCloudNormals);
+    icp.setInputSource(sourceTransNormals);
     icp.setInputTarget(targetTCloudNormals);
 
-    //perform icp and align pointcloud
-    pcl::PointCloud<pcl::PointXYZINormal>::Ptr icp_result = sourceTCloudNormals;
+    // perform icp and get incremental transform to align pointcloud
+    pcl::PointCloud<pcl::PointXYZINormal>::Ptr icp_result = sourceTransNormals;
 
     Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity (), prev, targetToSource;
 
     for (int i = 0; i <1; ++i){
         PCL_INFO("iteration Nr. %d. \n", i);
 
-        sourceTCloudNormals=icp_result;
+        sourceTransNormals=icp_result;
         // Estimate
-        icp.setInputSource (sourceTCloudNormals);
+        icp.setInputSource (sourceTransNormals);
         icp.align(*icp_result);
 
         //accumulate transformation between each Iteration
@@ -171,8 +177,9 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
         icp.getFitnessScore() << std::endl;
     }
 
-    sToT = Ti;
-        //get and save the transform
+    //compose prior with incremental transform
+    sToT = priorSToT*Ti;
+    priorSToT = sToT;
 }
 
 void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud,
@@ -192,20 +199,17 @@ void PointProcessor::registerNewFrame()
 //    PointProcessor::downsampleTCloud(newPointTCloud);
 
     //performIcpWithNormal
-    Eigen::Matrix4f sourceToTarget = Eigen::Matrix4f::Identity(), targetToSource;  //define 2 variables, Ti, targetToSource
+    Eigen::Matrix4f newToGlobal = Eigen::Matrix4f::Identity();  //define 2 variables, Ti, targetToSource
     //performIcpWNormals(globalPointTCloud, newPointTCloud, Ti); //void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
-    performIcpWNormals(globalPointTCloud, newPointTCloud, sourceToTarget);
+    performIcpWNormals(newPointTCloud, globalPointTCloud, priorNewToGlobal, newToGlobal); //icp with prior, the newPointTCloud should be the smaller one compared to the globalPointTCloud for computational speed, as the newPointTCloud will be transformed by prior transform before performing icp
 
     //pairwise registration
-    targetToSource = sourceToTarget.inverse();    //get transformation from target to source
-//    globalTargetToSource = targetToSource*globalTargetToSource;
-    std::cout<< targetToSource<< std::endl;
-    registerPair(newPointTCloud, globalPointTCloud, targetToSource);
-    plottf(targetToSource, "velodyne", "map");
+    std::cout<< newToGlobal<< std::endl;
+    registerPair(newPointTCloud, globalPointTCloud, newToGlobal);
+    plottf(newToGlobal, "velodyne", "map");
 
     //downsample global pointcloud
     PointProcessor::downsampleTCloud(globalPointTCloud);
-
 }
 
 int main (int argc, char** argv){
