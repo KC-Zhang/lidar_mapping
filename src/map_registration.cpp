@@ -58,7 +58,6 @@ void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
     if (first_msg == true) {
 //        prevCloudMsg = *msg;
         pcl::fromROSMsg(*msg, *globalPointTCloud);
-        PointProcessor::downsampleTCloud(globalPointTCloud);  //downsample
         pcl::copyPointCloud<pcl::PointXYZI>(*globalPointTCloud, *prevPointTCloud);
         first_msg = false;
         return;
@@ -82,7 +81,7 @@ void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAn
     pcl::PointCloud<pcl::PointXYZI>::Ptr tempFiltered (new pcl::PointCloud<pcl::PointXYZI>);
     pcl::VoxelGrid<pcl::PointXYZI> sor;
     sor.setInputCloud (inAndOutCloud);
-    sor.setLeafSize (0.1f, 0.1f, 0.1f);
+    sor.setLeafSize (0.01f, 0.01f, 0.01f);
     sor.filter (*tempFiltered);
     *inAndOutCloud=*tempFiltered;
 }
@@ -195,9 +194,6 @@ void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTClou
 }
 void PointProcessor::registerNewFrame()
 {
-    //downsample incoming pointcloud and return to the same variable
-//    PointProcessor::downsampleTCloud(newPointTCloud);
-
     //performIcpWithNormal
     Eigen::Matrix4f newToGlobal = Eigen::Matrix4f::Identity();  //define 2 variables, Ti, targetToSource
     //performIcpWNormals(globalPointTCloud, newPointTCloud, Ti); //void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
@@ -222,13 +218,14 @@ int main (int argc, char** argv){
     //ros variables
     ros::NodeHandle nh;
     ros::Rate loop_rate(10);
+    ros::Time lastSaveTime=ros::Time::now();
+    ros::Duration saveIntervalSec(10);
 
     //subscribers and publishers
     pointProcessor.pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
     registration_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_aggregated", 1);
     pointProcessor.pairwise_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_pairwise", 1);
-    ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);
-
+    ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);    
 
     while(ros::ok()){
         //check for new sensor message
@@ -244,9 +241,16 @@ int main (int argc, char** argv){
         registration_pub.publish(globalCloudMsg);
         std::cout<<globalCloudMsg.header.stamp<<"pointcloud time"<<std::endl;
 
+        //save pcds
+        if ((ros::Time::now() - lastSaveTime) > saveIntervalSec){
+            pcl::io::savePCDFileASCII ("/home/kaicheng/pcds/mc202.pcd", *pointProcessor.globalPointTCloud);
+            std::cerr << "Saved " << pointProcessor.globalPointTCloud->points.size () << " data points to mc202.pcd." << std::endl;
+            lastSaveTime = ros::Time::now();
+        }
+
         //finishing the loop
         pointProcessor.newPointCloudReceived = false;
-        loop_rate.sleep();
+        loop_rate.sleep();                           
         //ros::spin();
     }
 }
