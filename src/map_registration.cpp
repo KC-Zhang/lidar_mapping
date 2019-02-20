@@ -142,39 +142,26 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
 
     // setup icp with normal
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp;
-    icp.setTransformationEpsilon (1e-6);
-    icp.setMaxCorrespondenceDistance (0.2);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
-    icp.setMaximumIterations (100);
+    icp.setTransformationEpsilon (1e-8);
+    icp.setMaxCorrespondenceDistance (0.12);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
+    icp.setMaximumIterations (200);
     icp.setInputSource(sourceTransNormals);
     icp.setInputTarget(targetTCloudNormals);
 
     // perform icp and get incremental transform to align pointcloud
     pcl::PointCloud<pcl::PointXYZINormal>::Ptr icp_result = sourceTransNormals;
 
-    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity (), prev, targetToSource;
+    Eigen::Matrix4f Ti = Eigen::Matrix4f::Identity ();
 
-    for (int i = 0; i <1; ++i){
-        PCL_INFO("iteration Nr. %d. \n", i);
+    // Estimate
+    icp.setInputSource (sourceTransNormals);
+    icp.align(*icp_result);
 
-        sourceTransNormals=icp_result;
-        // Estimate
-        icp.setInputSource (sourceTransNormals);
-        icp.align(*icp_result);
+    //accumulate transformation between each Iteration
+    Ti = icp.getFinalTransformation();
 
-        //accumulate transformation between each Iteration
-        Ti = icp.getFinalTransformation() * Ti;
-
-        //if the difference between this transformation and the previous one
-        //is smaller than the threshold, refine the process by reducing
-        //the maximal correspondence distance
-        if (fabs ((icp.getLastIncrementalTransformation()-prev).sum()) <icp.getTransformationEpsilon())
-            icp.setMaxCorrespondenceDistance(icp.getMaxCorrespondenceDistance()-0.001);
-        prev=icp.getLastIncrementalTransformation();
-        //???????????need to be implement : wait for converge
-
-        std::cout << "has converged:" << icp.hasConverged() << " score: " <<
-        icp.getFitnessScore() << std::endl;
-    }
+    std::cout << "has converged:" << icp.hasConverged() << " score: " <<
+    icp.getFitnessScore() << std::endl;
 
     //compose prior with incremental transform
     sToT = priorSToT*Ti;
@@ -205,7 +192,7 @@ void PointProcessor::registerNewFrame()
     plottf(newToGlobal, "velodyne", "map");
 
     //downsample global pointcloud
-    PointProcessor::downsampleTCloud(globalPointTCloud);
+    //PointProcessor::downsampleTCloud(globalPointTCloud);
 }
 
 int main (int argc, char** argv){
@@ -226,7 +213,7 @@ int main (int argc, char** argv){
     registration_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_aggregated", 1);
     pointProcessor.pairwise_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_pairwise", 1);
     ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);    
-
+    int count =1;
     while(ros::ok()){
         //check for new sensor message
         ros::spinOnce();
@@ -242,10 +229,14 @@ int main (int argc, char** argv){
         std::cout<<globalCloudMsg.header.stamp<<"pointcloud time"<<std::endl;
 
         //save pcds
-        if ((ros::Time::now() - lastSaveTime) > saveIntervalSec){
+//        ros::Duration duration = ros::Time::now() - lastSaveTime;
+//        bool saveOrNot = (duration > saveIntervalSec);
+        count +=1;
+        if (count>10){
             pcl::io::savePCDFileASCII ("/home/kaicheng/pcds/mc202.pcd", *pointProcessor.globalPointTCloud);
             std::cerr << "Saved " << pointProcessor.globalPointTCloud->points.size () << " data points to mc202.pcd." << std::endl;
-            lastSaveTime = ros::Time::now();
+//            lastSaveTime = ros::Time::now();
+            count=1;
         }
 
         //finishing the loop
