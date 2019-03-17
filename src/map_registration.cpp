@@ -158,7 +158,7 @@ void PointProcessor::performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sou
     pcl::IterativeClosestPointWithNormals<pcl::PointXYZINormal, pcl::PointXYZINormal> icp;
     icp.setTransformationEpsilon (1e-8);
     icp.setMaxCorrespondenceDistance (0.12);   // Set the maximum distance between two correspondences (src<->tgt) to 10cm
-    icp.setMaximumIterations (200);
+    icp.setMaximumIterations (50);
     icp.setInputSource(sourceTransNormals);
     icp.setInputTarget(targetTCloudNormals);
 
