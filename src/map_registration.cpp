@@ -3,11 +3,14 @@
 #include "pcl/io/pcd_io.h"
 #include "pcl/point_types.h"
 #include "pcl/filters/voxel_grid.h"
+#include <pcl/filters/passthrough.h>
 #include "sensor_msgs/PointCloud2.h"
 #include "pcl_conversions/pcl_conversions.h"
 #include "pcl/registration/icp.h"
 #include <pcl/features/normal_3d.h>
 #include <tf/transform_broadcaster.h>
+#include <list>
+#include <thread>
 
 class PointProcessor
 {
@@ -18,10 +21,12 @@ class PointProcessor
         ros::Publisher pub;
         ros::Publisher pairwise_pub;
         tf::TransformBroadcaster tf_broadcast;
-        pcl::PointCloud<pcl::PointXYZI>::Ptr newPointTCloud, prevPointTCloud, globalPointTCloud;
+        pcl::PointCloud<pcl::PointXYZI>::Ptr newPointTCloud, prevPointTCloud, globalPointTCloud, zFiltered;
+        std::list<sensor_msgs::PointCloud2> newPointCloud2List;
+
         bool first_msg;
-        bool newPointCloudReceived;
         Eigen::Matrix4f priorNewToGlobal;
+        void getNextPointCloud();
         void lidarCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void registerNewFrame();
         void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource);
@@ -35,6 +40,7 @@ class PointProcessor
                                         pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud,
                                         Eigen::Matrix4f &outTransformation);
         void plottf(Eigen::Matrix4f h, std::string parentName, std::string childName);
+        void passthroughZFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr inCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr &cloudFiltered);
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
@@ -42,8 +48,9 @@ class PointProcessor
             globalPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
             newPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
             prevPointTCloud = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
-            newPointCloudReceived = false;
             priorNewToGlobal = Eigen::Matrix4f::Identity ();
+            zFiltered = pcl::PointCloud<pcl::PointXYZI>::Ptr(new pcl::PointCloud<pcl::PointXYZI>);
+
         }
 
         ~PointProcessor(){
@@ -51,29 +58,30 @@ class PointProcessor
         }
 };
 
+void PointProcessor::getNextPointCloud(){
+    pcl::fromROSMsg(newPointCloud2List.front(), *newPointTCloud);
+    newPointCloud2List.pop_front();
+    std::cout<<"new pointcloud processed, remaining list size is: "<<newPointCloud2List.size()<<std::endl;
+}
 ////callbacks
 void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
     //initial pointcloud
     if (first_msg == true) {
-//        prevCloudMsg = *msg;
+        prevCloudMsg = *msg;
         pcl::fromROSMsg(*msg, *globalPointTCloud);
         pcl::copyPointCloud<pcl::PointXYZI>(*globalPointTCloud, *prevPointTCloud);
         first_msg = false;
         return;
     }
 
-//    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.5) {
-//        return;
-//    }
+    if ((msg->header.stamp - prevCloudMsg.header.stamp).toSec() < 0.3) {
+        return;
+    }
 
-    //    pcl::PointCloud<pcl::PointXYZI>::Ptr prevPointTCloud(new pcl::PointCloud<pcl::PointXYZI>);
-    //    pcl::fromROSMsg(prevCloudMsg, *prevPointTCloud); //void 	fromROSMsg (const sensor_msgs::PointCloud2 &cloud, pcl::PointCloud< T > &pcl_cloud)
-
-    pcl::fromROSMsg(*msg, *newPointTCloud);
-    newPointCloudReceived = true;
-
-//    prevCloudMsg = *msg;
+    newPointCloud2List.push_back(*msg);
+    std::cout<<"new pointcloud added, list size is : "<<newPointCloud2List.size()<<std::endl;
+    prevCloudMsg.header.stamp=msg->header.stamp;
 }
 
 void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAndOutCloud)
@@ -84,6 +92,15 @@ void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAn
     sor.setLeafSize (0.01f, 0.01f, 0.01f);
     sor.filter (*tempFiltered);
     *inAndOutCloud=*tempFiltered;
+}
+
+void PointProcessor::passthroughZFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr inCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr &cloudFiltered)
+{    // Create the filtering object
+    pcl::PassThrough<pcl::PointXYZI> pass;
+    pass.setInputCloud (inCloud);
+    pass.setFilterFieldName("z");
+    pass.setFilterLimits (-0.15, 5.0);
+    pass.filter (*cloudFiltered);
 }
 
 void PointProcessor::plottf(Eigen::Matrix4f h, std::string parentName, std::string childName){
@@ -119,7 +136,7 @@ void PointProcessor::addNormal(pcl::PointCloud<pcl::PointXYZI>::Ptr cloud,
     pcl::NormalEstimation<pcl::PointXYZI, pcl::PointXYZINormal> normalEstimator;
     normalEstimator.setInputCloud (cloud);
     normalEstimator.setSearchMethod (searchTree);
-    normalEstimator.setRadiusSearch (0.25);
+    normalEstimator.setRadiusSearch (0.4);
     normalEstimator.compute (*cloud_with_normals);
     pcl::copyPointCloud(*cloud, *cloud_with_normals);
 }
@@ -181,10 +198,13 @@ void PointProcessor::performIcp(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTClou
 }
 void PointProcessor::registerNewFrame()
 {
+    //passthrough filter z value
+//    passthroughZFilter(newPointTCloud,zFiltered);
+
     //performIcpWithNormal
     Eigen::Matrix4f newToGlobal = Eigen::Matrix4f::Identity();  //define 2 variables, Ti, targetToSource
-    //performIcpWNormals(globalPointTCloud, newPointTCloud, Ti); //void performIcpWNormals(pcl::PointCloud<pcl::PointXYZI>::Ptr sourceTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr targetTCloud, Eigen::Matrix4f &outTransformation)
     performIcpWNormals(newPointTCloud, globalPointTCloud, priorNewToGlobal, newToGlobal); //icp with prior, the newPointTCloud should be the smaller one compared to the globalPointTCloud for computational speed, as the newPointTCloud will be transformed by prior transform before performing icp
+//    performIcpWNormals(zFiltered, globalPointTCloud, priorNewToGlobal, newToGlobal);  //z filtered cloud for icp
 
     //pairwise registration
     std::cout<< newToGlobal<< std::endl;
@@ -192,14 +212,16 @@ void PointProcessor::registerNewFrame()
     plottf(newToGlobal, "velodyne", "map");
 
     //downsample global pointcloud
-    //PointProcessor::downsampleTCloud(globalPointTCloud);
+    PointProcessor::downsampleTCloud(globalPointTCloud);
 }
 
 int main (int argc, char** argv){
-	ros::init (argc, argv, "my_pcl_tutorial");
+    ros::init (argc, argv, "my_pcl_tutorial");
     PointProcessor pointProcessor;
     ros::Publisher registration_pub;
     sensor_msgs::PointCloud2 globalCloudMsg;
+//    sensor_msgs::PointCloud2 zFilteredMsg, globalCloudMsg;
+
     pointProcessor.first_msg = true;
 
     //ros variables
@@ -212,36 +234,35 @@ int main (int argc, char** argv){
     pointProcessor.pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_downsampled", 1);
     registration_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_aggregated", 1);
     pointProcessor.pairwise_pub=nh.advertise<sensor_msgs::PointCloud2> ("velodyne_points_pairwise", 1);
-    ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);    
+    ros::Subscriber icpsub=nh.subscribe("velodyne_points", 1, &PointProcessor::lidarCallback, &pointProcessor);
     int count =1;
+    ros::AsyncSpinner spinner(1);
+    spinner.start();
+
     while(ros::ok()){
         //check for new sensor message
-        ros::spinOnce();
-        if (pointProcessor.newPointCloudReceived == false){
+        if (pointProcessor.newPointCloud2List.empty()){
             continue;}
 
+        pointProcessor.getNextPointCloud();
         //alignment and registration
         pointProcessor.registerNewFrame();
 
         //convert to msg
+//        pcl::toROSMsg(*pointProcessor.zFiltered, zFilteredMsg);
+//        pointProcessor.pairwise_pub.publish(zFilteredMsg);
         pcl::toROSMsg(*pointProcessor.globalPointTCloud, globalCloudMsg);
         registration_pub.publish(globalCloudMsg);
         std::cout<<globalCloudMsg.header.stamp<<"pointcloud time"<<std::endl;
 
-        //save pcds
-//        ros::Duration duration = ros::Time::now() - lastSaveTime;
-//        bool saveOrNot = (duration > saveIntervalSec);
         count +=1;
         if (count>10){
             pcl::io::savePCDFileASCII ("/home/kaicheng/pcds/mc202.pcd", *pointProcessor.globalPointTCloud);
             std::cerr << "Saved " << pointProcessor.globalPointTCloud->points.size () << " data points to mc202.pcd." << std::endl;
-//            lastSaveTime = ros::Time::now();
             count=1;
         }
 
         //finishing the loop
-        pointProcessor.newPointCloudReceived = false;
-        loop_rate.sleep();                           
-        //ros::spin();
+        loop_rate.sleep();
     }
 }
