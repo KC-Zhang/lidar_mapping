@@ -11,6 +11,8 @@
 #include <tf/transform_broadcaster.h>
 #include <list>
 #include <thread>
+#include <tf/transform_listener.h>
+
 
 class PointProcessor
 {
@@ -27,6 +29,7 @@ class PointProcessor
         bool first_msg;
         Eigen::Matrix4f priorNewToGlobal;
         void getNextPointCloud();
+        void getTransformation(const std::string baseFrame, const std::string targetFrame, tf::StampedTransform &tf);
         void lidarCallback(const sensor_msgs::PointCloud2Ptr& msg);
         void registerNewFrame();
         void registerPair(pcl::PointCloud<pcl::PointXYZI>::Ptr newTCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr globalCloud, Eigen::Matrix4f targetToSource);
@@ -41,6 +44,7 @@ class PointProcessor
                                         Eigen::Matrix4f &outTransformation);
         void plottf(Eigen::Matrix4f h, std::string parentName, std::string childName);
         void passthroughZFilter(pcl::PointCloud<pcl::PointXYZI>::Ptr inCloud, pcl::PointCloud<pcl::PointXYZI>::Ptr &cloudFiltered);
+        tf::TransformListener tfListener;
 
         pcl::PointCloud<pcl::PointXYZI>::Ptr downSampleCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr cloudIn);
 
@@ -64,13 +68,28 @@ void PointProcessor::getNextPointCloud(){
     std::cout<<"new pointcloud processed, remaining list size is: "<<newPointCloud2List.size()<<std::endl;
 }
 ////callbacks
+void PointProcessor::getTransformation(const std::string sourceFrame, const std::string targetFrame, tf::StampedTransform &tf){
+    try{
+    tfListener.lookupTransform(sourceFrame, targetFrame,
+                             ros::Time(0), tf);
+    }
+    catch (tf::TransformException &ex) {
+    ROS_ERROR("map_registration.cpp %s",ex.what());
+    ros::Duration(0.01).sleep();
+    }
+}
 void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
 {
     //initial pointcloud
     if (first_msg == true) {
+        //get pointcloud and convert to pcl
         prevCloudMsg = *msg;
         pcl::fromROSMsg(*msg, *globalPointTCloud);
         pcl::copyPointCloud<pcl::PointXYZI>(*globalPointTCloud, *prevPointTCloud);
+        //get tf and convert to pcl
+        tf::StampedTransform tfMapToVelodyne;
+        getTransformation("zed_odom", "velodyne", tfMapToVelodyne);
+        //finishing if
         first_msg = false;
         return;
     }
@@ -79,9 +98,15 @@ void PointProcessor::lidarCallback(const sensor_msgs::PointCloud2Ptr& msg)
         return;
     }
 
+    tf::StampedTransform tfMapToVelodyne;
+    getTransformation("zed_odom", "velodyne", tfMapToVelodyne);
+
     newPointCloud2List.push_back(*msg);
     std::cout<<"new pointcloud added, list size is : "<<newPointCloud2List.size()<<std::endl;
+    std::cout<<"pointcloud stamp: "<< msg->header.stamp <<"tf stamp: " << tfMapToVelodyne.stamp_<<std::endl;
+
     prevCloudMsg.header.stamp=msg->header.stamp;
+
 }
 
 void PointProcessor::downsampleTCloud(pcl::PointCloud<pcl::PointXYZI>::Ptr &inAndOutCloud)

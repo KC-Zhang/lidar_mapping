@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
   <package format="2">
   <name>lidar_mapping</name>
-  <version>0.0.0</version>
+  <version>0.3.4</version>
   <description>The lidar_mapping package</description>
 
   <!-- One maintainer tag required, multiple allowed, one person per tag -->
@@ -53,6 +53,11 @@
   <depend>sensor_msgs</depend>
   <depend>roscpp</depend>
   <depend>pcl_conversions</depend>
+  <build_depend>tf</build_depend>
+  <build_export_depend>tf</build_export_depend>
+  <exec_depend>tf</exec_depend>
+
+
 
 
   <!-- The export tag contains other, unspecified, tags -->
