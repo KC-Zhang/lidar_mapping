@@ -5,6 +5,8 @@
 #include <ros/ros.h>
 #include <tf/transform_listener.h>
 #include <geometry_msgs/PoseWithCovarianceStamped.h>
+#include <pcl_ros/transforms.h>
+
 
 
 int main (int argc, char** argv)
@@ -16,9 +18,13 @@ int main (int argc, char** argv)
     while (true){
       tf::StampedTransform transform;
       try{
-        listener.lookupTransform("/map", "/velodyne",
+        listener.lookupTransform("zed_odom", "velodyne",
                                  ros::Time(0), transform);
-        std::cout<<"tf stamp: " << transform.stamp_<<std::endl;
+
+        Eigen::Matrix4f tfEigen;
+        pcl_ros::transformAsMatrix(transform, tfEigen);
+
+         std::cout<<"tf stamp: " << transform.stamp_<<std::endl;
       }
       catch (tf::TransformException &ex) {
         ROS_ERROR("icp_tut.cpp %s",ex.what());

@@ -97,11 +97,12 @@ include_directories(
   include
   ${catkin_INCLUDE_DIRS}
 )
-add_executable (downsample src/downsample.cpp)
-target_link_libraries (downsample ${catkin_LIBRARIES})
+#add_executable (downsample src/downsample.cpp)
+#target_link_libraries (downsample ${catkin_LIBRARIES})
+
 add_executable(map_registration src/map_registration.cpp)
-target_link_libraries(map_registration 
-  ${catkin_LIBRARIES} 
+target_link_libraries(map_registration
+  ${catkin_LIBRARIES}
   ${PCL_LIBRARIES}
 )
 add_executable(icp_tut src/icp_tut.cpp)
@@ -110,8 +111,8 @@ target_link_libraries(icp_tut
   ${PCL_LIBRARIES}
 )
 
-add_executable (pairwise_incremental_registration src/pairwise_incremental_registration.cpp)
-target_link_libraries (pairwise_incremental_registration ${PCL_LIBRARIES} ${catkin_LIBRARIES})
+#add_executable (pairwise_incremental_registration src/pairwise_incremental_registration.cpp)
+#target_link_libraries (pairwise_incremental_registration ${PCL_LIBRARIES} ${catkin_LIBRARIES})
 ## Declare a C++ library
 # add_library(${PROJECT_NAME}
 #   src/${PROJECT_NAME}/pcl_downsample.cpp
