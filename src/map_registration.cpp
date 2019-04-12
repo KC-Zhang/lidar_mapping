@@ -412,7 +412,7 @@ int main (int argc, char** argv){
     ros::AsyncSpinner spinner(1);
     spinner.start();
 
-    ros::Duration(100).sleep();
+//    ros::Duration(100).sleep();
     while(ros::ok()){
         //check for new sensor message
         if (pointProcessor.newPointCloud2List.empty() || pointProcessor.first_msg==true){
@@ -433,7 +433,7 @@ int main (int argc, char** argv){
         registration_pub.publish(globalCloudMsg);
         count ++;
         nameCount++;
-        if (count>=10 && nameCount>=100){
+        if (count>=10 && nameCount>=50){
             pcl::io::savePCDFileASCII ("/home/kaicheng/pcds/mc202_" + std::to_string(nameCount/10) +".pcd", *pointProcessor.globalVisualizationPointTCloud);
             std::cerr << "Saved " << pointProcessor.globalVisualizationPointTCloud->points.size () << " data points to /home/kaicheng/pcds/mc202_" + std::to_string(nameCount/10) +".pcd" << std::endl;
             count=0;
